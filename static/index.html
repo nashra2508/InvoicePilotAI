@@ -1,0 +1,63 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InvoicePilotAI - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <header>
+        <h1>InvoicePilotAI</h1>
+        <p>Smart AI-powered invoice management</p>
+    </header>
+
+    <main>
+        <section class="dashboard">
+            <div class="card">
+                <h3>Total Invoices</h3>
+                <p id="totalInvoices">0</p>
+            </div>
+
+            <div class="card">
+                <h3>Total Revenue</h3>
+                <p id="totalRevenue">₹0</p>
+            </div>
+
+            <div class="card">
+                <h3>Pending</h3>
+                <p id="pendingInvoices">0</p>
+            </div>
+
+            <div class="card">
+                <h3>Paid</h3>
+                <p id="paidInvoices">0</p>
+            </div>
+        </section>
+
+        <section class="invoice-section">
+            <h2>All Invoices</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Client</th>
+                        <th>Description</th>
+                        <th>Amount</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="invoiceTable">
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
