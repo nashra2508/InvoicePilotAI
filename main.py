@@ -9,9 +9,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from datetime import date
-from paypal_service import create_paypal_order, capture_paypal_order
+from paypal_service import create_paypal_order, capture_paypal_order, get_paypal_order
 from currency_service import convert_inr_to_usd
-
+from decimal import Decimal, InvalidOperation
 
 app = FastAPI(title="InvoicePilotAI")
 
@@ -20,7 +20,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -198,34 +198,11 @@ def create_payment_reminder(data: dict):
         return {"error": str(error)}
 
 
-@app.put("/invoices/{invoice_id}/pay")
-def mark_invoice_paid(invoice_id: int):
-
-    conn = get_connection()
-
-    try:
-        cursor = conn.execute(
-            "UPDATE invoices SET status = 'Paid' WHERE invoice_id = ?",
-            (invoice_id,)
-        )
-
-        conn.commit()
-
-        if cursor.rowcount == 0:
-            return {"error": "Invoice not found"}
-
-        return {
-            "message": "Invoice marked as Paid successfully",
-            "invoice_id": invoice_id,
-            "status": "Paid"
-        }
-
-    finally:
-        conn.close()
-
 
 class PayPalOrderRequest(BaseModel):
     invoice_id: int
+    order_id: str | None = None
+
 
 
 @app.post("/create-paypal-order")
@@ -240,17 +217,48 @@ def create_payment_order(data: PayPalOrderRequest):
         ).fetchone()
 
         if invoice is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Invoice not found"
-            )
+            raise HTTPException(404, "Invoice not found")
 
         if invoice["status"] == "Paid":
-            raise HTTPException(
-                status_code=400,
-                detail="Invoice already paid"
-            )
+            raise HTTPException(400, "Invoice already paid")
 
+        # Check whether an order already exists
+        existing_order_id = invoice["paypal_order_id"]
+
+        if existing_order_id:
+            existing_order = get_paypal_order(existing_order_id)
+            existing_status = existing_order.get("status")
+
+            # Reuse an order that is still active
+            if existing_status in (
+                "CREATED",
+                "SAVED",
+                "APPROVED",
+                "PAYER_ACTION_REQUIRED"
+            ):
+                return {
+                    "order_id": existing_order_id,
+                    "status": existing_status,
+                    "inr_amount": invoice["amount"],
+                    "usd_amount": invoice["paypal_usd_amount"],
+                    "exchange_rate": None,
+                    "rate_date": None
+                }
+
+            # Never replace a potentially completed payment
+            if existing_status == "COMPLETED":
+                raise HTTPException(
+                    409,
+                    "PayPal order is completed. Verify payment before creating another order."
+                )
+
+            if existing_status != "VOIDED":
+                raise HTTPException(
+                    409,
+                    "Existing PayPal order needs verification."
+                )
+
+        # Create a new order only if no order exists or the old one is voided
         usd_amount, exchange_rate, rate_date = convert_inr_to_usd(
             invoice["amount"]
         )
@@ -261,8 +269,17 @@ def create_payment_order(data: PayPalOrderRequest):
         )
 
         conn.execute(
-            "UPDATE invoices SET paypal_order_id = ? WHERE invoice_id = ?",
-            (order["id"], data.invoice_id)
+            """
+            UPDATE invoices
+            SET paypal_order_id = ?,
+                paypal_usd_amount = ?
+            WHERE invoice_id = ?
+            """,
+            (
+                order["id"],
+                str(usd_amount),
+                data.invoice_id
+            )
         )
 
         conn.commit()
@@ -279,14 +296,15 @@ def create_payment_order(data: PayPalOrderRequest):
     except HTTPException:
         raise
 
-    except Exception as error:
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=str(error)
+            detail="Payment verification failed. Check server logs."
         )
 
     finally:
         conn.close()
+
 
 
 @app.post("/capture-paypal-payment")
@@ -301,48 +319,117 @@ def capture_payment(data: PayPalOrderRequest):
         ).fetchone()
 
         if invoice is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Invoice not found"
-            )
+            raise HTTPException(404, "Invoice not found")
 
         if invoice["status"] == "Paid":
-            raise HTTPException(
-                status_code=400,
-                detail="Invoice already paid"
-            )
+          return {
+               "message": "Payment already verified",
+           "invoice_id": data.invoice_id,
+           "capture_id": invoice["paypal_capture_id"],
+           "status": "Paid"
+             }
 
         order_id = invoice["paypal_order_id"]
+        expected_amount = invoice["paypal_usd_amount"]
 
-        if not order_id:
+        if not data.order_id:
+          raise HTTPException(
+          status_code=400,
+          detail="PayPal order ID is required"
+           )
+
+        if data.order_id != order_id:
+           raise HTTPException(
+           status_code=400,
+           detail="PayPal order ID mismatch"
+           )
+
+        if not order_id or not expected_amount:
             raise HTTPException(
-                status_code=400,
-                detail="PayPal order not found"
+                400,
+                "PayPal order or expected amount not found"
             )
 
-        result = capture_paypal_order(order_id)
+        # Retrieve the existing PayPal order first
+        result = get_paypal_order(order_id)
 
+        # Capture only if PayPal has not completed the payment
+        if result.get("status") == "APPROVED":
+           result = capture_paypal_order(order_id)
+
+        elif result.get("status") != "COMPLETED":
+            raise HTTPException(
+              status_code=400,
+              detail="PayPal order is not approved or completed"
+           )
+
+        # Verify order ID
+        if result.get("id") != order_id:
+            raise HTTPException(400, "PayPal order ID mismatch")
+
+        # Verify order status
         if result.get("status") != "COMPLETED":
-            raise HTTPException(
-                status_code=400,
-                detail="Payment not completed"
-            )
+            raise HTTPException(400, "Payment not completed")
 
-        capture_id = (
-            result["purchase_units"][0]["payments"]["captures"][0]["id"]
-        )
+        # Get purchase and capture details
+        purchase_units = result.get("purchase_units", [])
 
+        if len(purchase_units) != 1:
+            raise HTTPException(400, "Invalid PayPal purchase details")
+
+        purchase = purchase_units[0]
+
+        # Verify invoice reference
+        if purchase.get("custom_id") != str(data.invoice_id):
+            raise HTTPException(400, "Invoice reference mismatch")
+
+        captures = purchase.get("payments", {}).get("captures", [])
+
+        if len(captures) != 1:
+            raise HTTPException(400, "Invalid PayPal capture details")
+
+        capture = captures[0]
+
+        # Verify capture status
+        if capture.get("status") != "COMPLETED":
+            raise HTTPException(400, "Capture not completed")
+
+        # Verify currency
+        captured_amount = capture.get("amount", {})
+
+        if captured_amount.get("currency_code") != "USD":
+            raise HTTPException(400, "Payment currency mismatch")
+
+        # Verify exact payment amount
+        try:
+            actual_amount = Decimal(captured_amount["value"])
+            required_amount = Decimal(expected_amount)
+        except (KeyError, InvalidOperation, TypeError):
+            raise HTTPException(400, "Invalid payment amount")
+
+        if actual_amount != required_amount:
+            raise HTTPException(400, "Payment amount mismatch")
+
+        capture_id = capture.get("id")
+
+        if not capture_id:
+            raise HTTPException(400, "Capture ID missing")
+
+        # Update invoice only after successful verification
         conn.execute(
-            """UPDATE invoices
-               SET status = 'Paid', paypal_capture_id = ?
-               WHERE invoice_id = ?""",
+            """
+            UPDATE invoices
+            SET status = 'Paid',
+                paypal_capture_id = ?
+            WHERE invoice_id = ?
+            """,
             (capture_id, data.invoice_id)
         )
 
         conn.commit()
 
         return {
-            "message": "PayPal payment successful",
+            "message": "PayPal payment successfully verified",
             "invoice_id": data.invoice_id,
             "capture_id": capture_id,
             "status": "Paid"
@@ -351,10 +438,10 @@ def capture_payment(data: PayPalOrderRequest):
     except HTTPException:
         raise
 
-    except Exception as error:
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=str(error)
+            detail="Payment processing failed. Please check the server logs."
         )
 
     finally:

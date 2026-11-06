@@ -12,7 +12,7 @@ The application also converts invoice amounts from INR to USD using live exchang
 - **AI Invoice Generation:** Convert casual job descriptions into professional invoice descriptions using Google Gemini AI.
 - **AI Payment Reminders:** Generate polite and professional payment reminder messages.
 - **Dashboard:** View total invoices, revenue, pending invoices, and paid invoices.
-- **Payment Status:** Update invoice payment status.
+- **Payment Status:** Automatically update invoice status after successful PayPal payment verification.
 - **PayPal Integration:** Create and capture PayPal Sandbox payments.
 - **Currency Conversion:** Convert INR invoice amounts into USD using the Frankfurter exchange-rate API.
 - **SQLite Database:** Store invoice records locally.
@@ -50,7 +50,7 @@ InvoicePilotAI/
 │
 ├── requirements.txt
 ├── .gitignore
-├── .env
+├── .env.example
 └── README.md
 ```
 
@@ -92,23 +92,8 @@ pip install -r requirements.txt
 
 ### 6. Configure environment variables
 
-Create a `.env` file in the root directory.
-
-Add your own API credentials:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key
-
-PAYPAL_CLIENT_ID=your_paypal_sandbox_client_id
-PAYPAL_CLIENT_SECRET=your_paypal_sandbox_client_secret
-PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
-```
-
-**Important:**
-- Never upload your `.env` file to GitHub.
-- Never share your PayPal Client Secret or Gemini API key.
-- Use PayPal Sandbox credentials for testing.
-- Do not use real payment credentials for development testing.
+Copy the .env.example file and rename the copy to .env.
+Then replace the placeholder values with your own API credentials.
 
 ### 7. Run the application
 
@@ -148,6 +133,17 @@ The payment workflow:
 
 **Payment testing:** Only PayPal Sandbox is configured for development. No real payments should be made during testing.
 
+### PayPal Account Country Restriction
+
+**Important:** PayPal does not support domestic transactions between two Indian PayPal accounts.
+
+- The buyer and seller must not both have Indian PayPal accounts.
+- If the seller has an Indian PayPal account, the buyer must be based outside India for an international payment.
+- InvoicePilotAI converts INR invoice amounts into USD before creating PayPal orders.
+- Currency conversion alone does not make a domestic transaction eligible for payment.
+
+**Sandbox Testing:** Use a buyer Sandbox account registered outside India to test international PayPal payments.
+
 ## 🤖 AI Integration
 
 Google Gemini AI powers two main features:
@@ -178,7 +174,7 @@ The backend exposes the following main endpoints:
 | POST | `/invoices` | Create an invoice |
 | POST | `/generate-invoice` | Generate an AI invoice draft |
 | POST | `/generate-reminder` | Generate an AI payment reminder |
-| PUT | `/invoices/{invoice_id}/pay` | Update invoice payment status |
+
 | GET | `/paypal-config` | Retrieve public PayPal configuration |
 | POST | `/create-paypal-order` | Create a PayPal order |
 | POST | `/capture-paypal-payment` | Capture a PayPal payment |

@@ -100,9 +100,10 @@ async function renderPayPalButton(container, invoice) {
                         headers: {
                             "Content-Type": "application/json"
                         },
-                        body: JSON.stringify({
-                            invoice_id: invoice.invoice_id
-                        })
+                       body: JSON.stringify({
+                          invoice_id: invoice.invoice_id,
+                          order_id: data.orderID
+                          })
                     }
                 );
 
@@ -248,45 +249,13 @@ async function loadInvoices() {
             actionCell.appendChild(reminderButton);
 
 
-            // Existing Mark as Paid button
-            const paidButton = document.createElement("button");
-
-            paidButton.textContent = "Mark as Paid";
-            paidButton.style.marginLeft = "8px";
-
-            paidButton.addEventListener("click", async () => {
-
-                try {
-                    const response = await fetch(
-                        `http://127.0.0.1:8000/invoices/${invoice.invoice_id}/pay`,
-                        {
-                            method: "PUT"
-                        }
-                    );
-
-                    const result = await response.json();
-
-                    if (!response.ok || result.error) {
-                        throw new Error(
-                            result.error || "Request failed"
-                        );
-                    }
-
-                    alert("Invoice marked as Paid!");
-
-                    loadInvoices();
-
-                } catch (error) {
-                    alert("Error: " + error.message);
-                }
-            });
 
 
             if (invoice.status === "Pending") {
 
-                actionCell.appendChild(paidButton);
 
-                // PayPal button container
+
+           // PayPal button container
                 const paypalContainer = document.createElement("div");
 
                 paypalContainer.id =
@@ -310,6 +279,7 @@ async function loadInvoices() {
         console.error("Error loading invoices:", error);
     }
 }
+
 
 
 // Start dashboard

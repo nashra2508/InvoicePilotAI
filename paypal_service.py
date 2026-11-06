@@ -70,3 +70,17 @@ def capture_paypal_order(order_id):
 
     response.raise_for_status()
     return response.json()
+def get_paypal_order(order_id):
+    token = get_access_token()
+
+    response = requests.get(
+        f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        },
+        timeout=30
+    )
+
+    response.raise_for_status()
+    return response.json()
