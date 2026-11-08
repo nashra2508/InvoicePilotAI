@@ -280,7 +280,45 @@ async function loadInvoices() {
     }
 }
 
+document.getElementById("generateAiInvoiceButton").addEventListener("click", async () => {
+    const jobDescription = document.getElementById("aiJobDescription").value.trim();
+    const message = document.getElementById("aiInvoiceMessage");
 
+    if (!jobDescription) {
+        message.textContent = "Please describe the work first.";
+        return;
+    }
+
+    message.textContent = "Generating invoice...";
+
+    try {
+        const response = await fetch("/generate-invoice", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                job_description: jobDescription
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || result.error) {
+            throw new Error(result.error || "Failed to generate invoice");
+        }
+
+        message.textContent = "Invoice generated successfully!";
+
+        document.getElementById("aiJobDescription").value = "";
+
+        await loadInvoices();
+
+    } catch (error) {
+        message.textContent = "Error: " + error.message;
+        console.error(error);
+    }
+});
 
 // Start dashboard
 loadInvoices();
