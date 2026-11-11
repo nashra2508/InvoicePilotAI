@@ -15,13 +15,20 @@ async function loadPayPalSdk() {
         throw new Error("PayPal Client ID is missing");
     }
 
-    const existingScript = document.querySelector('script[src*="paypal.com/sdk/js"]');
+    const existingScript = document.querySelector(
+        'script[src*="paypal.com/sdk/js"]'
+    );
+
     if (existingScript) {
-        // If client-id matches and window.paypal is ready, reuse existing SDK
-        if (existingScript.src.includes("client-id=" + encodeURIComponent(config.client_id)) && window.paypal) {
+        if (
+            existingScript.src.includes(
+                "client-id=" + encodeURIComponent(config.client_id)
+            ) &&
+            window.paypal
+        ) {
             return;
         }
-        // If client-id changed, remove stale script and reset window.paypal
+
         existingScript.remove();
         delete window.paypal;
         paypalSdkPromise = null;
@@ -40,6 +47,7 @@ async function loadPayPalSdk() {
             "&currency=USD&intent=capture";
 
         script.onload = () => resolve();
+
         script.onerror = () => {
             paypalSdkPromise = null;
             reject(new Error("PayPal SDK failed to load"));
@@ -66,7 +74,6 @@ async function renderPayPalButton(container, invoice) {
             throw new Error("PayPal SDK is unavailable");
         }
 
-        // Prevent duplicate buttons in the container
         container.innerHTML = "";
 
         window.paypal.Buttons({
@@ -123,12 +130,16 @@ async function renderPayPalButton(container, invoice) {
                     }
 
                     setTimeout(() => {
-                        alert("Payment successful! Invoice marked as Paid.");
+                        alert(
+                            "Payment successful! Invoice marked as Paid."
+                        );
                     }, 50);
 
                     await loadInvoices();
+
                 } catch (err) {
                     console.error("Capture error:", err);
+
                     setTimeout(() => {
                         alert("Payment capture failed: " + err.message);
                     }, 50);
@@ -137,7 +148,7 @@ async function renderPayPalButton(container, invoice) {
 
             onCancel: function (data) {
                 console.log("PAYPAL CANCEL DATA:", data);
-                // Non-blocking alert ensures postMessage ACK is delivered back to PayPal immediately
+
                 setTimeout(() => {
                     alert("PayPal payment was cancelled.");
                 }, 50);
@@ -145,12 +156,26 @@ async function renderPayPalButton(container, invoice) {
 
             onError: function (error) {
                 console.error("PayPal error:", error);
-                // Suppress benign postMessage acknowledgment timeout caused by window closure
-                if (error && error.message && error.message.includes("No ack for postMessage onCancel")) {
+
+                if (
+                    error &&
+                    error.message &&
+                    error.message.includes(
+                        "No ack for postMessage onCancel"
+                    )
+                ) {
                     return;
                 }
+
                 setTimeout(() => {
-                    alert("PayPal payment error: " + (error && error.message ? error.message : "Please try again."));
+                    alert(
+                        "PayPal payment error: " +
+                        (
+                            error && error.message
+                                ? error.message
+                                : "Please try again."
+                        )
+                    );
                 }, 50);
             }
 
@@ -158,7 +183,8 @@ async function renderPayPalButton(container, invoice) {
 
     } catch (error) {
         console.error("PayPal button error:", error);
-        container.textContent = "PayPal unavailable: " + error.message;
+        container.textContent =
+            "PayPal unavailable: " + error.message;
     }
 }
 
@@ -166,9 +192,7 @@ async function renderPayPalButton(container, invoice) {
 // Load all invoices
 async function loadInvoices() {
     try {
-        const response = await fetch(
-            "/invoices"
-        );
+        const response = await fetch("/invoices");
 
         if (!response.ok) {
             throw new Error("Could not load invoices");
@@ -205,7 +229,6 @@ async function loadInvoices() {
         table.innerHTML = "";
 
         invoices.forEach(invoice => {
-
             const row = document.createElement("tr");
 
             [
@@ -216,7 +239,6 @@ async function loadInvoices() {
                 invoice.due_date,
                 invoice.status
             ].forEach(value => {
-
                 const cell = document.createElement("td");
 
                 cell.textContent = value;
@@ -226,14 +248,12 @@ async function loadInvoices() {
 
             const actionCell = document.createElement("td");
 
-
             // Generate Reminder button
             const reminderButton = document.createElement("button");
 
             reminderButton.textContent = "Generate Reminder";
 
             reminderButton.addEventListener("click", async () => {
-
                 reminderButton.disabled = true;
                 reminderButton.textContent = "Generating...";
 
@@ -272,10 +292,8 @@ async function loadInvoices() {
 
             actionCell.appendChild(reminderButton);
 
-
+            // PayPal button for Pending invoices
             if (invoice.status === "Pending") {
-
-                // PayPal button container
                 const paypalContainer = document.createElement("div");
 
                 paypalContainer.id =
@@ -314,13 +332,16 @@ document.getElementById("generateAiInvoiceButton").addEventListener(
         const button = this;
 
         if (!description) {
-            message.textContent = "Please enter an invoice description.";
+            message.textContent =
+                "Please enter an invoice description.";
             return;
         }
 
         button.disabled = true;
         button.textContent = "Generating...";
-        message.textContent = "AI is generating your invoice...";
+
+        message.textContent =
+            "AI is generating your invoice...";
 
         try {
             const response = await fetch(
@@ -344,7 +365,8 @@ document.getElementById("generateAiInvoiceButton").addEventListener(
                 );
             }
 
-            message.textContent = "Invoice generated successfully!";
+            message.textContent =
+                "Invoice generated successfully!";
 
             document.getElementById("aiJobDescription").value = "";
 
