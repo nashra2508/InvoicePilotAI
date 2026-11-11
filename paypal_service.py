@@ -42,11 +42,22 @@ def create_paypal_order(amount, invoice_id):
             "purchase_units": [{
                 "reference_id": str(invoice_id),
                 "custom_id": str(invoice_id),
+                "description": f"Invoice #{invoice_id} Payment",
                 "amount": {
                     "currency_code": "USD",
                     "value": f"{amount:.2f}"
                 }
-            }]
+            }],
+            "payment_source": {
+                "paypal": {
+                    "experience_context": {
+                        "brand_name": "InvoicePilotAI",
+                        "landing_page": "NO_PREFERENCE",
+                        "shipping_preference": "NO_SHIPPING",
+                        "user_action": "PAY_NOW"
+                    }
+                }
+            }
         },
         timeout=30
     )
@@ -62,9 +73,24 @@ def capture_paypal_order(order_id):
         f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}/capture",
         headers={
             "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
         },
         json={},
+        timeout=30
+    )
+
+    response.raise_for_status()
+    return response.json()
+def get_paypal_order(order_id):
+    token = get_access_token()
+
+    response = requests.get(
+        f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        },
         timeout=30
     )
 
