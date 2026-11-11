@@ -1,4 +1,3 @@
-
 let paypalSdkPromise = null;
 
 // Load PayPal SDK using the public Client ID from backend
@@ -79,83 +78,77 @@ async function renderPayPalButton(container, invoice) {
         window.paypal.Buttons({
 
             createOrder: async function () {
-                const response = await fetch(
-                    "/create-paypal-order",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            invoice_id: invoice.invoice_id
-                        })
-                    }
-                );
+                const response = await fetch("/create-paypal-order", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        invoice_id: invoice.invoice_id
+                    })
+                });
 
                 const result = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(
-                        result.detail || "Could not create PayPal order"
-                    );
+                    const msg = result.detail || "Could not create PayPal order";
+                    alert("Order creation error: " + msg);
+                    throw new Error(msg);
                 }
 
-                console.log("PayPal order:", result);
-
+                console.log("PayPal order created successfully:", result);
                 return result.order_id;
             },
 
             onApprove: async function (data) {
                 try {
-                    const response = await fetch(
-                        "/capture-paypal-payment",
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json"
-                            },
-                            body: JSON.stringify({
-                                invoice_id: invoice.invoice_id,
-                                order_id: data.orderID
-                            })
-                        }
-                    );
+                    const response = await fetch("/capture-paypal-payment", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            invoice_id: invoice.invoice_id,
+                            order_id: data.orderID
+                        })
+                    });
 
                     const result = await response.json();
 
                     if (!response.ok) {
-                        throw new Error(
-                            result.detail || "Payment capture failed"
-                        );
+                        const errMsg = result.detail || "Payment capture failed";
+                        alert("PayPal Payment Status: " + errMsg);
+                        throw new Error(errMsg);
                     }
+
+                    // Immediately reload invoices to update status and dashboard cards from Pending to Paid
+                    await loadInvoices();
 
                     setTimeout(() => {
                         alert(
-                            "Payment successful! Invoice marked as Paid."
+                            "Payment successful! Invoice #" +
+                            invoice.invoice_id +
+                            " status changed to Paid."
                         );
                     }, 50);
 
-                    await loadInvoices();
-
                 } catch (err) {
-                    console.error("Capture error:", err);
-
+                    console.error("Capture processing error:", err);
                     setTimeout(() => {
-                        alert("Payment capture failed: " + err.message);
+                        alert("Payment capture notice: " + err.message);
                     }, 50);
                 }
             },
 
             onCancel: function (data) {
                 console.log("PAYPAL CANCEL DATA:", data);
-
                 setTimeout(() => {
                     alert("PayPal payment was cancelled.");
                 }, 50);
             },
 
             onError: function (error) {
-                console.error("PayPal error:", error);
+                console.error("PayPal button error:", error);
 
                 if (
                     error &&
@@ -169,11 +162,11 @@ async function renderPayPalButton(container, invoice) {
 
                 setTimeout(() => {
                     alert(
-                        "PayPal payment error: " +
+                        "PayPal transaction notice: " +
                         (
                             error && error.message
                                 ? error.message
-                                : "Please try again."
+                                : "Payment attempt declined or interrupted. Ensure using an international PayPal Sandbox account with test funds."
                         )
                     );
                 }, 50);
@@ -182,9 +175,8 @@ async function renderPayPalButton(container, invoice) {
         }).render(container);
 
     } catch (error) {
-        console.error("PayPal button error:", error);
-        container.textContent =
-            "PayPal unavailable: " + error.message;
+        console.error("PayPal setup error:", error);
+        container.textContent = "PayPal unavailable: " + error.message;
     }
 }
 
@@ -231,36 +223,42 @@ async function loadInvoices() {
         invoices.forEach(invoice => {
             const row = document.createElement("tr");
 
+            // Columns: ID, Client, Description, Amount, Due Date
             [
                 invoice.invoice_id,
                 invoice.client_name,
                 invoice.description,
                 "₹" + Number(invoice.amount).toLocaleString("en-IN"),
-                invoice.due_date,
-                invoice.status
+                invoice.due_date
             ].forEach(value => {
                 const cell = document.createElement("td");
-
                 cell.textContent = value;
-
                 row.appendChild(cell);
             });
 
+            // Status Column with colored badge
+            const statusCell = document.createElement("td");
+            const statusBadge = document.createElement("span");
+            statusBadge.className =
+                invoice.status === "Paid" ? "badge badge-paid" : "badge badge-pending";
+            statusBadge.textContent = invoice.status;
+            statusCell.appendChild(statusBadge);
+            row.appendChild(statusCell);
+
+            // Action Column
             const actionCell = document.createElement("td");
 
-            // Generate Reminder button
-            const reminderButton = document.createElement("button");
+            if (invoice.status === "Pending") {
+                // Generate Reminder button
+                const reminderButton = document.createElement("button");
+                reminderButton.textContent = "Generate Reminder";
 
-            reminderButton.textContent = "Generate Reminder";
+                reminderButton.addEventListener("click", async () => {
+                    reminderButton.disabled = true;
+                    reminderButton.textContent = "Generating...";
 
-            reminderButton.addEventListener("click", async () => {
-                reminderButton.disabled = true;
-                reminderButton.textContent = "Generating...";
-
-                try {
-                    const response = await fetch(
-                        "/generate-reminder",
-                        {
+                    try {
+                        const res = await fetch("/generate-reminder", {
                             method: "POST",
                             headers: {
                                 "Content-Type": "application/json"
@@ -268,47 +266,49 @@ async function loadInvoices() {
                             body: JSON.stringify({
                                 invoice_id: invoice.invoice_id
                             })
+                        });
+
+                        const result = await res.json();
+
+                        if (!res.ok || result.error) {
+                            throw new Error(result.error || "Request failed");
                         }
-                    );
 
-                    const result = await response.json();
+                        alert(result.reminder);
 
-                    if (!response.ok || result.error) {
-                        throw new Error(
-                            result.error || "Request failed"
-                        );
+                    } catch (error) {
+                        alert("Error: " + error.message);
+
+                    } finally {
+                        reminderButton.disabled = false;
+                        reminderButton.textContent = "Generate Reminder";
                     }
+                });
 
-                    alert(result.reminder);
+                actionCell.appendChild(reminderButton);
 
-                } catch (error) {
-                    alert("Error: " + error.message);
-
-                } finally {
-                    reminderButton.disabled = false;
-                    reminderButton.textContent = "Generate Reminder";
-                }
-            });
-
-            actionCell.appendChild(reminderButton);
-
-            // PayPal button for Pending invoices
-            if (invoice.status === "Pending") {
+                // PayPal button container
                 const paypalContainer = document.createElement("div");
-
-                paypalContainer.id =
-                    "paypal-button-" + invoice.invoice_id;
-
+                paypalContainer.id = "paypal-button-" + invoice.invoice_id;
                 paypalContainer.style.marginTop = "10px";
                 paypalContainer.style.minWidth = "150px";
 
                 actionCell.appendChild(paypalContainer);
-
                 renderPayPalButton(paypalContainer, invoice);
+
+            } else {
+                // For Paid invoices: show confirmed payment badge
+                const paidIndicator = document.createElement("div");
+                paidIndicator.className = "paid-indicator";
+                paidIndicator.textContent = "✓ Paid";
+                if (invoice.paypal_capture_id) {
+                    paidIndicator.title =
+                        "PayPal Capture ID: " + invoice.paypal_capture_id;
+                }
+                actionCell.appendChild(paidIndicator);
             }
 
             row.appendChild(actionCell);
-
             table.appendChild(row);
         });
 
@@ -318,63 +318,50 @@ async function loadInvoices() {
 }
 
 
-// AI Invoice Generator
+// AI Invoice Generator - Single Event Listener
 document.getElementById("generateAiInvoiceButton").addEventListener(
     "click",
     async function () {
-
         const description = document.getElementById(
             "aiJobDescription"
         ).value.trim();
 
         const message = document.getElementById("aiInvoiceMessage");
-
         const button = this;
 
         if (!description) {
-            message.textContent =
-                "Please enter an invoice description.";
+            message.textContent = "Please enter an invoice description.";
             return;
         }
 
         button.disabled = true;
         button.textContent = "Generating...";
-
-        message.textContent =
-            "AI is generating your invoice...";
+        message.textContent = "AI is generating your invoice...";
 
         try {
-            const response = await fetch(
-                "/generate-invoice",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        job_description: description
-                    })
-                }
-            );
+            const response = await fetch("/generate-invoice", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    job_description: description
+                })
+            });
 
             const result = await response.json();
 
             if (!response.ok || result.error) {
-                throw new Error(
-                    result.error || "Invoice generation failed"
-                );
+                throw new Error(result.error || "Invoice generation failed");
             }
 
-            message.textContent =
-                "Invoice generated successfully!";
-
+            message.textContent = "Invoice generated successfully!";
             document.getElementById("aiJobDescription").value = "";
 
             await loadInvoices();
 
         } catch (error) {
             message.textContent = "Error: " + error.message;
-
             console.error("AI Invoice Error:", error);
 
         } finally {

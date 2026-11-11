@@ -106,3 +106,35 @@ button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+.badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.badge-pending {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+
+.badge-paid {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.paid-indicator {
+    color: #155724;
+    background: #e8f5e9;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 13px;
+    display: inline-block;
+    border: 1px solid #c8e6c9;
+}

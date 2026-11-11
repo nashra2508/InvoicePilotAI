@@ -153,12 +153,13 @@ InvoicePilotAI integrates PayPal Sandbox for payment testing.
 
 The application uses the Frankfurter API to retrieve exchange-rate information.
 
-### Payment testing
+### Payment testing & Avoiding Sandbox Declines
 
 - Only PayPal Sandbox is configured for development and testing.
 - Use Sandbox accounts rather than real PayPal accounts.
-- No real payments should be made during testing.
-- PayPal account country restrictions may apply. Currency conversion alone does not make a domestic transaction eligible for payment. Follow PayPal's current account and cross-border transaction requirements.
+- **Critical Cross-Border Requirement**: PayPal does not support domestic payments between two Indian PayPal accounts. If your merchant Sandbox account is registered in India, you must log into the PayPal checkout modal using an **International personal Sandbox buyer account** (e.g., Country: United States / US). Using an Indian buyer account will cause PayPal to decline the transaction.
+- **Merchant Currency Settings**: Ensure your Sandbox business account in PayPal Developer Dashboard has "Payment Receiving Preferences" set to accept foreign currencies (USD).
+- **Credentials in `.env`**: Make sure `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are copied accurately from your PayPal Developer App (they must not be identical).
 
 ## 🤖 AI Integration
 

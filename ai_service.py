@@ -52,7 +52,16 @@ Never invent missing information.
         contents=prompt
     )
 
-    return json.loads(response.text)
+    raw_text = response.text.strip()
+    if raw_text.startswith("```"):
+        lines = raw_text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        raw_text = "\n".join(lines).strip()
+
+    return json.loads(raw_text)
 def generate_payment_reminder(client_name, description, amount, due_date):
 
     prompt = f"""
